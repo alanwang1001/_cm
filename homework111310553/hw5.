@@ -1,0 +1,144 @@
+import random
+# 基礎群類別介面（模擬 group.py）
+class Group:
+    def operation(self, a, b): pass
+    def inverse(self, val): pass
+    def include(self, element): pass
+    def random_generate(self): pass
+    @property
+    def identity(self): pass
+# --- 有限體加法群 (GF(p), +) ---
+class FiniteFieldAddGroup(Group):
+    def __init__(self, p):
+        self.p = p
+        self._identity = 0
+    
+    @property
+    def identity(self):
+        return self._identity
+
+    def operation(self, a, b):
+        return (a + b) % self.p
+
+    def inverse(self, val):
+        return (-val) % self.p
+
+    def include(self, element):
+        return isinstance(element, int) and 0 <= element < self.p
+
+    def random_generate(self):
+        return random.randint(0, self.p - 1)
+
+# --- 有限體乘法群 (GF(p)*, ×) ---
+class FiniteFieldMulGroup(Group):
+    def __init__(self, p):
+        self.p = p
+        self._identity = 1
+
+    @property
+    def identity(self):
+        return self._identity
+
+    def operation(self, a, b):
+        return (a * b) % self.p
+
+    def inverse(self, val):
+        if val == 0:
+            raise ValueError("零沒有乘法逆元")
+        # 使用費馬小定理：a^(p-2) % p 是 a 的逆元（當 p 為質數時）
+        return pow(val, self.p - 2, self.p)
+
+    def include(self, element):
+        return isinstance(element, int) and 0 < element < self.p
+
+    def random_generate(self):
+        return random.randint(1, self.p - 1)
+
+class FiniteField:
+    def __init__(self, p):
+        if p < 2: raise ValueError("p 必須是大於 1 的質數")
+        self.p = p
+        self.add_group = FiniteFieldAddGroup(p)
+        self.mul_group = FiniteFieldMulGroup(p)
+
+    def element(self, value):
+        """工廠方法，返回具有運算子重載的元素物件"""
+        return FiniteFieldElement(self, value % self.p)
+
+    def add(self, a, b): return self.add_group.operation(a, b)
+    def subtract(self, a, b): return self.add_group.operation(a, self.add_group.inverse(b))
+    def multiply(self, a, b): return self.mul_group.operation(a, b)
+    def divide(self, a, b): return self.mul_group.operation(a, self.mul_group.inverse(b))
+
+    def __repr__(self):
+        return f"GF({self.p})"
+    class FiniteFieldElement:
+    def __init__(self, field, value):
+        self.field = field
+        self.value = value % field.p
+
+    def __repr__(self):
+        return f"{self.value} (mod {self.field.p})"
+
+    def __eq__(self, other):
+        if isinstance(other, FiniteFieldElement):
+            return self.field == other.field and self.value == other.value
+        return self.value == other
+
+    def __add__(self, other):
+        other_val = other.value if isinstance(other, FiniteFieldElement) else other
+        return self.field.element(self.field.add(self.value, other_val))
+
+    def __sub__(self, other):
+        other_val = other.value if isinstance(other, FiniteFieldElement) else other
+        return self.field.element(self.subtract_logic(self.value, other_val))
+
+    def subtract_logic(self, a, b):
+        return (a - b) % self.field.p
+
+    def __mul__(self, other):
+        other_val = other.value if isinstance(other, FiniteFieldElement) else other
+        return self.field.element(self.field.multiply(self.value, other_val))
+
+    def __truediv__(self, other):
+        other_val = other.value if isinstance(other, FiniteFieldElement) else other
+        if other_val == 0: raise ZeroDivisionError("除數不能為零")
+        return self.field.element(self.field.divide(self.value, other_val))
+
+    def __radd__(self, other): return self + other
+    def __rmul__(self, other): return self * other
+
+def verify_field(p=7):
+    F = FiniteField(p)
+    print(f"--- 測試有限體 {F} ---")
+    
+    # 1. 測試運算子重載
+    a = F.element(4)
+    b = F.element(5)
+    
+    print(f"a = {a}, b = {b}")
+    print(f"加法: {a} + {b} = {a + b}")       
+    print(f"減法: {a} - {b} = {a - b}")      
+    print(f"乘法: {a} * {b} = {a * b}")       
+    print(f"除法: {a} / {b} = {a / b}")       
+
+    # 2. 檢驗分配律: a * (b + c) == (a * b) + (a * c)
+    c = F.element(2)
+    lhs = a * (b + c)
+    rhs = (a * b) + (a * c)
+    print(f"\n分配律檢驗: {a}*({b}+{c}) = {lhs}")
+    print(f"            ({a}*{b})+({a}*{c}) = {rhs}")
+    assert lhs == rhs, "分配律失敗！"
+    print("分配律通過！")
+
+    # 3. 檢驗單位元素與逆元
+    print(f"\n逆元檢驗:")
+    inv_a = F.element(F.mul_group.inverse(a.value))
+    print(f"{a} 的乘法逆元是 {inv_a}")
+    print(f"驗證: {a} * {inv_a} = {a * inv_a} (應為 1)")
+    assert (a * inv_a).value == 1
+    
+    print("\n恭喜！有限體 GF(p) 實作符合所有公理。")
+
+if __name__ == "__main__":
+    verify_field(7) # 以 GF(7) 為例
